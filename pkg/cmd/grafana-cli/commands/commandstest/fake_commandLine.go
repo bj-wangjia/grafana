@@ -1,8 +1,8 @@
 package commandstest
 
 import (
-	"github.com/codegangsta/cli"
 	"github.com/grafana/grafana/pkg/cmd/grafana-cli/utils"
+	"github.com/urfave/cli/v2"
 )
 
 type FakeFlagger struct {
@@ -63,10 +63,6 @@ func (fcli *FakeCommandLine) Bool(key string) bool {
 	return fcli.LocalFlags.Bool(key)
 }
 
-func (fcli *FakeCommandLine) GlobalString(key string) string {
-	return fcli.GlobalFlags.String(key)
-}
-
 func (fcli *FakeCommandLine) Generic(name string) interface{} {
 	return fcli.LocalFlags.Data[name]
 }
@@ -98,15 +94,15 @@ func (fcli *FakeCommandLine) ShowVersion() {
 }
 
 func (fcli *FakeCommandLine) RepoDirectory() string {
-	return fcli.GlobalString("repo")
+	return fcli.String("repo")
 }
 
 func (fcli *FakeCommandLine) PluginDirectory() string {
-	return fcli.GlobalString("pluginsDir")
+	return fcli.String("pluginsDir")
 }
 
 func (fcli *FakeCommandLine) PluginURL() string {
-	return fcli.GlobalString("pluginUrl")
+	return fcli.String("pluginUrl")
 }
 
 func (fcli *FakeCommandLine) ApiClient() utils.ApiClient {
