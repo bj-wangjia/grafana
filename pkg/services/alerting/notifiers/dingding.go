@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/grafana/grafana/pkg/bus"
 	"github.com/grafana/grafana/pkg/infra/log"
@@ -22,6 +23,15 @@ const dingdingOptionsTemplate = `
         <span class="gf-form-label width-10">MessageType</span>
         <select class="gf-form-input max-width-14" ng-model="ctrl.model.settings.msgType" ng-options="s for s in ['link','actionCard']" ng-init="ctrl.model.settings.msgType=ctrl.model.settings.msgType || '` + defaultDingdingMsgType + `'"></select>
       </div>
+`
+
+const markdownTemplate = `
+### $title
+### $msg
+### 报警时间：$startTime
+### 持续时间：$remainTime
+### 详情 [detail]($msgUrl)
+### $atContent
 `
 
 func init() {
@@ -43,10 +53,13 @@ func newDingDingNotifier(model *models.AlertNotification) (alerting.Notifier, er
 
 	msgType := model.Settings.Get("msgType").MustString(defaultDingdingMsgType)
 
+	mobilesStr := model.Settings.Get("mobiles").MustString("18612626214,15320347357")
+
 	return &DingDingNotifier{
 		NotifierBase: NewNotifierBase(model),
 		MsgType:      msgType,
 		URL:          url,
+		AtMobiles:    strings.Split(mobilesStr, ","),
 		log:          log.New("alerting.notifier.dingding"),
 	}, nil
 }
@@ -54,9 +67,10 @@ func newDingDingNotifier(model *models.AlertNotification) (alerting.Notifier, er
 // DingDingNotifier is responsible for sending alert notifications to ding ding.
 type DingDingNotifier struct {
 	NotifierBase
-	MsgType string
-	URL     string
-	log     log.Logger
+	MsgType   string
+	URL       string
+	AtMobiles []string
+	log       log.Logger
 }
 
 // Notify sends the alert notification to dingding.
@@ -73,6 +87,8 @@ func (dd *DingDingNotifier) Notify(evalContext *alerting.EvalContext) error {
 	if err != nil {
 		return err
 	}
+
+	dd.log.Info("DingDingBody: ", body)
 
 	cmd := &models.SendWebhookSync{
 		Url:  dd.URL,
@@ -108,14 +124,14 @@ func (dd *DingDingNotifier) genBody(evalContext *alerting.EvalContext, messageUR
 	}
 
 	for i, match := range evalContext.EvalMatches {
-		message += fmt.Sprintf("\\n%2d. %s: %s", i+1, match.Metric, match.Value)
+		message += fmt.Sprintf("\n%2d. %s: %s", i+1, match.Metric, match.Value)
 	}
 
 	var bodyMsg map[string]interface{}
 	if dd.MsgType == "actionCard" {
 		// Embed the pic into the markdown directly because actionCard doesn't have a picUrl field
 		if picURL != "" {
-			message = "![](" + picURL + ")\\n\\n" + message
+			message = "![](" + picURL + ")\n\n" + message
 		}
 
 		bodyMsg = map[string]interface{}{
@@ -128,15 +144,38 @@ func (dd *DingDingNotifier) genBody(evalContext *alerting.EvalContext, messageUR
 			},
 		}
 	} else {
+		markdownContent := dd.genMarkdownContent(evalContext, title, messageURL)
 		bodyMsg = map[string]interface{}{
-			"msgtype": "link",
-			"link": map[string]string{
-				"text":       message,
-				"title":      title,
-				"picUrl":     picURL,
-				"messageUrl": messageURL,
+			"msgtype": "markdown",
+			"markdown": map[string]string{
+				"text":  markdownContent,
+				"title": title,
+			},
+			"at": map[string]interface{}{
+				"atMobiles": dd.AtMobiles,
+				"isAtAll":   false,
 			},
 		}
 	}
 	return json.Marshal(bodyMsg)
+}
+
+func (dd *DingDingNotifier) genMarkdownContent(evalContext *alerting.EvalContext, title, messageURL string) string {
+	content := markdownTemplate
+	message := evalContext.Rule.Message
+
+	var atMobilesBuilder strings.Builder
+	for _, mobile := range dd.AtMobiles {
+		atMobilesBuilder.WriteString("@")
+		atMobilesBuilder.WriteString(mobile)
+		atMobilesBuilder.WriteString(" ")
+	}
+
+	content = strings.Replace(content, "$title", title, -1)
+	content = strings.Replace(content, "$msg", message, -1)
+	content = strings.Replace(content, "$startTime", evalContext.StartTime.Format("2020-01-02 10:10:10"), -1)
+	content = strings.Replace(content, "$endTime", evalContext.EndTime.Format("2020-01-02 10:10:10"), -1)
+	content = strings.Replace(content, "$msgUrl", messageURL, -1)
+	content = strings.Replace(content, "$atContent", atMobilesBuilder.String(), -1)
+	return content
 }
