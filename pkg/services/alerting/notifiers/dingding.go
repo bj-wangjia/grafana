@@ -21,7 +21,11 @@ const dingdingOptionsTemplate = `
       </div>
       <div class="gf-form">
         <span class="gf-form-label width-10">MessageType</span>
-        <select class="gf-form-input max-width-14" ng-model="ctrl.model.settings.msgType" ng-options="s for s in ['link','actionCard']" ng-init="ctrl.model.settings.msgType=ctrl.model.settings.msgType || '` + defaultDingdingMsgType + `'"></select>
+        <select class="gf-form-input max-width-14" ng-model="ctrl.model.settings.msgType" ng-options="s for s in ['link','actionCard','markdown']" ng-init="ctrl.model.settings.msgType=ctrl.model.settings.msgType || '` + defaultDingdingMsgType + `'"></select>
+      </div>
+      <div class="gf-form">
+        <span class="gf-form-label width-10">Mobiles</span>
+        <input type="text" required class="gf-form-input max-width-70" ng-model="ctrl.model.settings.mobiles" placeholder="186xxxx1234,186xxxx1234"></input>
       </div>
 `
 
@@ -143,7 +147,7 @@ func (dd *DingDingNotifier) genBody(evalContext *alerting.EvalContext, messageUR
 				"singleURL":   messageURL,
 			},
 		}
-	} else {
+	} else if dd.MsgType == "markdown" {
 		markdownContent := dd.genMarkdownContent(evalContext, title, messageURL)
 		bodyMsg = map[string]interface{}{
 			"msgtype": "markdown",
@@ -154,6 +158,16 @@ func (dd *DingDingNotifier) genBody(evalContext *alerting.EvalContext, messageUR
 			"at": map[string]interface{}{
 				"atMobiles": dd.AtMobiles,
 				"isAtAll":   false,
+			},
+		}
+	} else {
+		bodyMsg = map[string]interface{}{
+			"msgtype": "link",
+			"link": map[string]string{
+				"text":       message,
+				"title":      title,
+				"picUrl":     picURL,
+				"messageUrl": messageURL,
 			},
 		}
 	}
