@@ -3,13 +3,13 @@ package notifiers
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
-	"strings"
-
 	"github.com/grafana/grafana/pkg/bus"
 	"github.com/grafana/grafana/pkg/infra/log"
 	"github.com/grafana/grafana/pkg/models"
 	"github.com/grafana/grafana/pkg/services/alerting"
+	"net/url"
+	"strings"
+	"time"
 )
 
 const defaultDingdingMsgType = "link"
@@ -25,13 +25,15 @@ const dingdingOptionsTemplate = `
       </div>
       <div class="gf-form">
         <span class="gf-form-label width-10">Mobiles</span>
-        <input type="text" required class="gf-form-input max-width-70" ng-model="ctrl.model.settings.mobiles" placeholder="186xxxx1234,186xxxx1234"></input>
+        <input type="text" class="gf-form-input max-width-70" ng-model="ctrl.model.settings.mobiles" placeholder="markdown MessageType required; such as '186xxx1234,186xxx4321'"></input>
       </div>
 `
 
 const markdownTemplate = `
 ### $title
+### $picUrl
 ### $msg
+$items
 ### 报警时间：$startTime
 ### 持续时间：$remainTime
 ### 详情 [detail]($msgUrl)
@@ -92,7 +94,7 @@ func (dd *DingDingNotifier) Notify(evalContext *alerting.EvalContext) error {
 		return err
 	}
 
-	dd.log.Info("DingDingBody: ", body)
+	dd.log.Info("DingDingBody: ", string(body))
 
 	cmd := &models.SendWebhookSync{
 		Url:  dd.URL,
@@ -185,10 +187,23 @@ func (dd *DingDingNotifier) genMarkdownContent(evalContext *alerting.EvalContext
 		atMobilesBuilder.WriteString(" ")
 	}
 
+	items := ""
+	for i, match := range evalContext.EvalMatches {
+		items += fmt.Sprintf("\n%2d. %s: %s", i+1, match.Metric, match.Value)
+	}
+
 	content = strings.Replace(content, "$title", title, -1)
 	content = strings.Replace(content, "$msg", message, -1)
-	content = strings.Replace(content, "$startTime", evalContext.StartTime.Format("2020-01-02 10:10:10"), -1)
-	content = strings.Replace(content, "$endTime", evalContext.EndTime.Format("2020-01-02 10:10:10"), -1)
+	if len(evalContext.ImagePublicURL) > 0 {
+		content = strings.Replace(content, "$picUrl", fmt.Sprintf("[picUrl](%s)", evalContext.ImagePublicURL), -1)
+
+	} else {
+		content = strings.Replace(content, "$picUrl", evalContext.ImagePublicURL, -1)
+	}
+	var cstZone = time.FixedZone("CST", 8*3600)
+	content = strings.Replace(content, "$items", items, -1)
+	content = strings.Replace(content, "$startTime", evalContext.Rule.LastStateChange.In(cstZone).Format("2006-01-02 15:04:05"), -1)
+	content = strings.Replace(content, "$remainTime", evalContext.EndTime.Sub(evalContext.Rule.LastStateChange).String(), -1)
 	content = strings.Replace(content, "$msgUrl", messageURL, -1)
 	content = strings.Replace(content, "$atContent", atMobilesBuilder.String(), -1)
 	return content
