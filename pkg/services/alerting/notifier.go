@@ -52,6 +52,7 @@ func (n *notificationService) SendIfNeeded(evalCtx *EvalContext) error {
 		return nil
 	}
 
+	n.log.Info(fmt.Sprintf("[%s-%b]", "wangjia: shouldUploadImage", notifierStates.ShouldUploadImage()))
 	if notifierStates.ShouldUploadImage() {
 		// Create a copy of EvalContext and give it a new, shorter, timeout context to upload the image
 		uploadEvalCtx := *evalCtx
@@ -148,6 +149,7 @@ func (n *notificationService) renderAndUploadImage(evalCtx *EvalContext, timeout
 		OrgId:           evalCtx.Rule.OrgID,
 		OrgRole:         models.ROLE_ADMIN,
 		ConcurrentLimit: setting.AlertingRenderLimit,
+		Timezone:        "",
 	}
 
 	ref, err := evalCtx.GetDashboardUID()

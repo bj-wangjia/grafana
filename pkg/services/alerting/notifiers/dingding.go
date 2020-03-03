@@ -36,7 +36,7 @@ const markdownTemplate = `
 $items
 ### 报警时间：$startTime
 ### 持续时间：$remainTime
-### 详情 [detail]($msgUrl)
+### 详情 [detail]($detailUrl)
 ### $atContent
 `
 
@@ -150,7 +150,7 @@ func (dd *DingDingNotifier) genBody(evalContext *alerting.EvalContext, messageUR
 			},
 		}
 	} else if dd.MsgType == "markdown" {
-		markdownContent := dd.genMarkdownContent(evalContext, title, messageURL)
+		markdownContent := dd.genMarkdownContent(evalContext)
 		bodyMsg = map[string]interface{}{
 			"msgtype": "markdown",
 			"markdown": map[string]string{
@@ -176,7 +176,7 @@ func (dd *DingDingNotifier) genBody(evalContext *alerting.EvalContext, messageUR
 	return json.Marshal(bodyMsg)
 }
 
-func (dd *DingDingNotifier) genMarkdownContent(evalContext *alerting.EvalContext, title, messageURL string) string {
+func (dd *DingDingNotifier) genMarkdownContent(evalContext *alerting.EvalContext) string {
 	content := markdownTemplate
 	message := evalContext.Rule.Message
 
@@ -192,19 +192,36 @@ func (dd *DingDingNotifier) genMarkdownContent(evalContext *alerting.EvalContext
 		items += fmt.Sprintf("\n%2d. %s: %s", i+1, match.Metric, match.Value)
 	}
 
+	messageURL, _ := evalContext.GetRuleURL()
+	title := StatusToString(evalContext.Rule.State)
+
 	content = strings.Replace(content, "$title", title, -1)
 	content = strings.Replace(content, "$msg", message, -1)
 	if len(evalContext.ImagePublicURL) > 0 {
-		content = strings.Replace(content, "$picUrl", fmt.Sprintf("[picUrl](%s)", evalContext.ImagePublicURL), -1)
-
+		content = strings.Replace(content, "$picUrl", fmt.Sprintf("![picUrl](%s)", evalContext.ImagePublicURL), -1)
 	} else {
 		content = strings.Replace(content, "$picUrl", evalContext.ImagePublicURL, -1)
 	}
 	var cstZone = time.FixedZone("CST", 8*3600)
+
 	content = strings.Replace(content, "$items", items, -1)
 	content = strings.Replace(content, "$startTime", evalContext.Rule.LastStateChange.In(cstZone).Format("2006-01-02 15:04:05"), -1)
-	content = strings.Replace(content, "$remainTime", evalContext.EndTime.Sub(evalContext.Rule.LastStateChange).String(), -1)
-	content = strings.Replace(content, "$msgUrl", messageURL, -1)
+	content = strings.Replace(content, "$remainTime", evalContext.StartTime.Sub(evalContext.Rule.LastStateChange).String(), -1)
+	content = strings.Replace(content, "$detailUrl", messageURL, -1)
 	content = strings.Replace(content, "$atContent", atMobilesBuilder.String(), -1)
+	dd.log.Info("content:"+content, "messageUrl:"+messageURL+"-*-", "picUrl:"+evalContext.ImagePublicURL)
 	return content
+}
+
+func StatusToString(stateType models.AlertStateType) string {
+	switch stateType {
+	case models.AlertStateAlerting:
+		return "[报警中]"
+	case models.AlertStateOK:
+		return "[报警已恢复]"
+	case models.AlertStateNoData:
+		return "[没有查到数据]"
+	default:
+		return "[未知错误]"
+	}
 }
