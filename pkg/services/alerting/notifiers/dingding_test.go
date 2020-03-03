@@ -2,14 +2,11 @@ package notifiers
 
 import (
 	"context"
-	"fmt"
-	"testing"
-	"time"
-
 	"github.com/grafana/grafana/pkg/components/simplejson"
 	"github.com/grafana/grafana/pkg/models"
 	"github.com/grafana/grafana/pkg/services/alerting"
 	. "github.com/smartystreets/goconvey/convey"
+	"testing"
 )
 
 func TestDingDingNotifier(t *testing.T) {
@@ -57,8 +54,4 @@ func TestDingDingNotifier(t *testing.T) {
 			})
 		})
 	})
-}
-
-func TestNewAlertmanagerNotifier(t *testing.T) {
-	fmt.Println(time.Now().Format("2019-06-17 21:50:05"))
 }

@@ -34,7 +34,7 @@ func TestAlertRuleFrequencyParsing(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		r, err := getTimeDurationStringToSeconds(tc.input)
+		r, err := GetTimeDurationStringToSeconds(tc.input)
 		if err != tc.err {
 			t.Errorf("expected error: '%v' got: '%v'", tc.err, err)
 			return
@@ -55,7 +55,7 @@ func TestAlertRuleModel(t *testing.T) {
 		})
 
 		Convey("should return err for empty string", func() {
-			_, err := getTimeDurationStringToSeconds("")
+			_, err := GetTimeDurationStringToSeconds("")
 			So(err, ShouldNotBeNil)
 		})
 

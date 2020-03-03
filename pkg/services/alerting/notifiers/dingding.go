@@ -7,6 +7,8 @@ import (
 	"github.com/grafana/grafana/pkg/infra/log"
 	"github.com/grafana/grafana/pkg/models"
 	"github.com/grafana/grafana/pkg/services/alerting"
+	"github.com/grafana/grafana/pkg/setting"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -27,6 +29,24 @@ const dingdingOptionsTemplate = `
         <span class="gf-form-label width-10">Mobiles</span>
         <input type="text" class="gf-form-input max-width-70" ng-model="ctrl.model.settings.mobiles" placeholder="markdown MessageType required; such as '186xxx1234,186xxx4321'"></input>
       </div>
+      <gf-form-switch
+          class="gf-form"
+          label="Alert By Telephone"
+          label-class="width-14"
+          checked="ctrl.model.settings.telAlert"
+          tooltip="钉钉报警持续一定时间会启动电话报警">
+      </gf-form-switch>
+      <div class="gf-form-inline">
+        <div class="gf-form" ng-if="ctrl.model.settings.telAlert">
+          <span class="gf-form-label width-12">Tel Alert after
+            <info-popover mode="right-normal" position="top center">
+              Specify how long  tel alert should be sent, e.g. after 30s, 1m, 10m, 30m or 1h etc.
+            </info-popover>
+          </span>
+          <input type="text" placeholder="Select or specify custom" class="gf-form-input width-15" ng-model="ctrl.model.settings.afterTime"
+            bs-typeahead="ctrl.getFrequencySuggestion" data-min-length=0 ng-required="ctrl.model.settings.afterTime">
+        </div>
+      </div>
 `
 
 const markdownTemplate = `
@@ -37,6 +57,7 @@ $items
 ### 报警时间：$startTime
 ### 持续时间：$remainTime
 ### 详情 [detail]($detailUrl)
+$telAlertMsg
 ### $atContent
 `
 
@@ -58,14 +79,21 @@ func newDingDingNotifier(model *models.AlertNotification) (alerting.Notifier, er
 	}
 
 	msgType := model.Settings.Get("msgType").MustString(defaultDingdingMsgType)
-
 	mobilesStr := model.Settings.Get("mobiles").MustString("18612626214,15320347357")
+	telAlert := model.Settings.Get("telAlert").MustBool(false)
+
+	afterTime, err := alerting.GetTimeDurationStringToSeconds(model.Settings.Get("afterTime").MustString())
+	if err != nil {
+		return nil, alerting.ValidationError{Reason: err.Error()}
+	}
 
 	return &DingDingNotifier{
 		NotifierBase: NewNotifierBase(model),
 		MsgType:      msgType,
 		URL:          url,
 		AtMobiles:    strings.Split(mobilesStr, ","),
+		TelAlert:     telAlert,
+		AfterTime:    afterTime,
 		log:          log.New("alerting.notifier.dingding"),
 	}, nil
 }
@@ -76,6 +104,8 @@ type DingDingNotifier struct {
 	MsgType   string
 	URL       string
 	AtMobiles []string
+	TelAlert  bool
+	AfterTime int64
 	log       log.Logger
 }
 
@@ -194,9 +224,8 @@ func (dd *DingDingNotifier) genMarkdownContent(evalContext *alerting.EvalContext
 
 	messageURL, _ := evalContext.GetRuleURL()
 	title := StatusToString(evalContext.Rule.State)
+	title += " " + evalContext.Rule.Name
 
-	content = strings.Replace(content, "$title", title, -1)
-	content = strings.Replace(content, "$msg", message, -1)
 	if len(evalContext.ImagePublicURL) > 0 {
 		content = strings.Replace(content, "$picUrl", fmt.Sprintf("![picUrl](%s)", evalContext.ImagePublicURL), -1)
 	} else {
@@ -204,13 +233,60 @@ func (dd *DingDingNotifier) genMarkdownContent(evalContext *alerting.EvalContext
 	}
 	var cstZone = time.FixedZone("CST", 8*3600)
 
+	remainTime := evalContext.EndTime.Sub(evalContext.Rule.LastStateChange)
+	if remainTime < 0 {
+		remainTime = -remainTime
+	}
+	telephoneMsg := ""
+	if dd.TelAlert {
+		d := time.Duration(dd.AfterTime)*time.Second - remainTime
+		if d > time.Minute {
+			telephoneMsg += "距离电话报警还有 " + d.String()
+		} else {
+			telephoneMsg += "正在电话报警...\n>" + dd.telAlert(title, message)
+		}
+	} else {
+		telephoneMsg += "没有开启电话报警功能"
+	}
+
+	content = strings.Replace(content, "$title", title, -1)
+	content = strings.Replace(content, "$msg", message, -1)
 	content = strings.Replace(content, "$items", items, -1)
+	content = strings.Replace(content, "$telAlertMsg", telephoneMsg, -1)
 	content = strings.Replace(content, "$startTime", evalContext.Rule.LastStateChange.In(cstZone).Format("2006-01-02 15:04:05"), -1)
-	content = strings.Replace(content, "$remainTime", evalContext.StartTime.Sub(evalContext.Rule.LastStateChange).String(), -1)
+	content = strings.Replace(content, "$remainTime", remainTime.String(), -1)
 	content = strings.Replace(content, "$detailUrl", messageURL, -1)
 	content = strings.Replace(content, "$atContent", atMobilesBuilder.String(), -1)
 	dd.log.Info("content:"+content, "messageUrl:"+messageURL+"-*-", "picUrl:"+evalContext.ImagePublicURL)
 	return content
+}
+
+type TelCalResponse struct {
+	Message string
+	Code    string
+}
+
+func (dd *DingDingNotifier) telAlert(title, message string) string {
+	if len(setting.TelAlertUrl) <= 0 {
+		return "报警失败: 没有配置报警Url"
+	}
+	for _, tel := range dd.AtMobiles {
+		v := url.Values{}
+		v.Add("tel", tel)
+		v.Add("platform", title)
+		v.Add("msg", message)
+		u := fmt.Sprintf("http://%s/?%s", setting.TelAlertUrl, v.Encode())
+		dd.log.Info("TelAlert: ", u)
+		res, err := http.Get(u)
+		if err != nil {
+			return "报警失败: " + err.Error()
+		}
+		if res.StatusCode != 200 {
+			return "报警失败: " + res.Status
+		}
+	}
+
+	return "电话报警成功."
 }
 
 func StatusToString(stateType models.AlertStateType) string {

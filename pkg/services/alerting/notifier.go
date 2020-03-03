@@ -52,7 +52,7 @@ func (n *notificationService) SendIfNeeded(evalCtx *EvalContext) error {
 		return nil
 	}
 
-	n.log.Info(fmt.Sprintf("[%s-%b]", "wangjia: shouldUploadImage", notifierStates.ShouldUploadImage()))
+	n.log.Info(fmt.Sprintf("[%s-%v]", "wangjia: shouldUploadImage", notifierStates.ShouldUploadImage()))
 	if notifierStates.ShouldUploadImage() {
 		// Create a copy of EvalContext and give it a new, shorter, timeout context to upload the image
 		uploadEvalCtx := *evalCtx

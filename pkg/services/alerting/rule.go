@@ -83,7 +83,7 @@ var unitMultiplier = map[string]int{
 	"d": 86400,
 }
 
-func getTimeDurationStringToSeconds(str string) (int64, error) {
+func GetTimeDurationStringToSeconds(str string) (int64, error) {
 	multiplier := 1
 
 	matches := valueFormatRegex.FindAllString(str, 1)

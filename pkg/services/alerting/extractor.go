@@ -110,7 +110,7 @@ func (e *DashAlertExtractor) getAlertFromPanels(jsonWithPanels *simplejson.Json,
 			continue
 		}
 
-		frequency, err := getTimeDurationStringToSeconds(jsonAlert.Get("frequency").MustString())
+		frequency, err := GetTimeDurationStringToSeconds(jsonAlert.Get("frequency").MustString())
 		if err != nil {
 			return nil, ValidationError{Reason: err.Error()}
 		}
