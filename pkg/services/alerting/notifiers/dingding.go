@@ -26,8 +26,8 @@ const dingdingOptionsTemplate = `
         <select class="gf-form-input max-width-14" ng-model="ctrl.model.settings.msgType" ng-options="s for s in ['link','actionCard','markdown']" ng-init="ctrl.model.settings.msgType=ctrl.model.settings.msgType || '` + defaultDingdingMsgType + `'"></select>
       </div>
       <div class="gf-form">
-        <span class="gf-form-label width-10">Mobiles</span>
-        <input type="text" class="gf-form-input max-width-70" ng-model="ctrl.model.settings.mobiles" placeholder="markdown MessageType required; such as '186xxx1234,186xxx4321'"></input>
+        <span class="gf-form-label width-10">DingDing Contracts</span>
+        <input type="text" class="gf-form-input max-width-70" ng-model="ctrl.model.settings.mobiles" placeholder="phone number: such as '186xxx1234,186xxx4321'"></input>
       </div>
       <gf-form-switch
           class="gf-form"
@@ -46,6 +46,24 @@ const dingdingOptionsTemplate = `
           <input type="text" placeholder="Select or specify custom" class="gf-form-input width-15" ng-model="ctrl.model.settings.afterTime"
             bs-typeahead="ctrl.getFrequencySuggestion" data-min-length=0 ng-required="ctrl.model.settings.afterTime">
         </div>
+      </div>
+      <div class="gf-form" ng-if="ctrl.model.settings.telAlert">
+        <span class="gf-form-label width-10">First Contacts</span>
+        <input type="text" required class="gf-form-input max-width-70" ng-model="ctrl.model.settings.firstContacts" placeholder="phone number: such as '186xxx1234,186xxx4321'"></input>
+      </div>
+      <div class="gf-form" ng-if="ctrl.model.settings.telAlert">
+        <span class="gf-form-label width-10">Second Contacts</span>
+        <input type="text" class="gf-form-input max-width-70" ng-model="ctrl.model.settings.secondContacts" placeholder="phone number: such as '186xxx1234,186xxx4321'"></input>
+      </div>
+      <div class="gf-form" ng-if="ctrl.model.settings.telAlert">
+        <span class="gf-form-label width-10">Third Contacts</span>
+        <input type="text" class="gf-form-input max-width-70" ng-model="ctrl.model.settings.thirdContacts" placeholder="phone number: such as '186xxx1234,186xxx4321'"></input>
+      </div>
+
+      <div class="gf-form" ng-if="ctrl.model.settings.telAlert">
+          <span class="alert alert-info width-30">
+               报警持续指定时间后，会电话告警第一联系人，持续2倍指定时间后电话告警第一、第二联系人，持续3倍指定时间后电话告警第一、第二、第三联系人
+          </span>
       </div>
 `
 
@@ -79,8 +97,11 @@ func newDingDingNotifier(model *models.AlertNotification) (alerting.Notifier, er
 	}
 
 	msgType := model.Settings.Get("msgType").MustString(defaultDingdingMsgType)
-	mobilesStr := model.Settings.Get("mobiles").MustString("18612626214,15320347357")
+	mobilesStr := model.Settings.Get("mobiles").MustString("")
 	telAlert := model.Settings.Get("telAlert").MustBool(false)
+	firstContacts := model.Settings.Get("firstContacts").MustString("")
+	secondContacts := model.Settings.Get("secondContacts").MustString("")
+	thirdContacts := model.Settings.Get("thirdContacts").MustString("")
 
 	afterTime, err := alerting.GetTimeDurationStringToSeconds(model.Settings.Get("afterTime").MustString())
 	if err != nil {
@@ -88,25 +109,31 @@ func newDingDingNotifier(model *models.AlertNotification) (alerting.Notifier, er
 	}
 
 	return &DingDingNotifier{
-		NotifierBase: NewNotifierBase(model),
-		MsgType:      msgType,
-		URL:          url,
-		AtMobiles:    strings.Split(mobilesStr, ","),
-		TelAlert:     telAlert,
-		AfterTime:    afterTime,
-		log:          log.New("alerting.notifier.dingding"),
+		NotifierBase:   NewNotifierBase(model),
+		MsgType:        msgType,
+		URL:            url,
+		AtMobiles:      split(mobilesStr, ","),
+		FirstContacts:  split(firstContacts, ","),
+		SecondContacts: split(secondContacts, ","),
+		ThirdContacts:  split(thirdContacts, ","),
+		TelAlert:       telAlert,
+		AfterTime:      afterTime,
+		log:            log.New("alerting.notifier.dingding"),
 	}, nil
 }
 
 // DingDingNotifier is responsible for sending alert notifications to ding ding.
 type DingDingNotifier struct {
 	NotifierBase
-	MsgType   string
-	URL       string
-	AtMobiles []string
-	TelAlert  bool
-	AfterTime int64
-	log       log.Logger
+	MsgType        string
+	URL            string
+	AtMobiles      []string
+	TelAlert       bool
+	FirstContacts  []string
+	SecondContacts []string
+	ThirdContacts  []string
+	AfterTime      int64
+	log            log.Logger
 }
 
 // Notify sends the alert notification to dingding.
@@ -149,8 +176,6 @@ func (dd *DingDingNotifier) genBody(evalContext *alerting.EvalContext, messageUR
 	// Use special link to auto open the message url outside of Dingding
 	// Refer: https://open-doc.dingtalk.com/docs/doc.htm?treeId=385&articleId=104972&docType=1#s9
 	messageURL = "dingtalk://dingtalkclient/page/link?" + q.Encode()
-
-	dd.log.Info("messageUrl:" + messageURL)
 
 	message := evalContext.Rule.Message
 	picURL := evalContext.ImagePublicURL
@@ -239,11 +264,38 @@ func (dd *DingDingNotifier) genMarkdownContent(evalContext *alerting.EvalContext
 	}
 	telephoneMsg := ""
 	if dd.TelAlert {
+		// 电话第一联系人
 		d := time.Duration(dd.AfterTime)*time.Second - remainTime
+		fmt.Println("1", dd.FirstContacts != nil, len(dd.FirstContacts) > 0, len(dd.FirstContacts), dd.FirstContacts)
 		if d > time.Minute {
-			telephoneMsg += "距离电话报警还有 " + d.String()
+			telephoneMsg += "\n* 距离电话通知第一联系人还有 " + d.String()
 		} else {
-			telephoneMsg += "正在电话报警...\n>" + dd.telAlert(title, message)
+			telephoneMsg += "\n* 正在电话通知第一联系人...\n>" + dd.telAlert(dd.FirstContacts, title, message)
+		}
+		// 电话第二联系人
+		log.New("alerting.notifier.dingding").Info(fmt.Sprintf("xxxxxfirst[%s], second[%s],third[%s]", dd.FirstContacts, dd.SecondContacts, dd.ThirdContacts))
+		fmt.Println("2", dd.SecondContacts != nil, len(dd.SecondContacts) > 0, len(dd.SecondContacts), dd.SecondContacts)
+		if dd.SecondContacts != nil && len(dd.SecondContacts) > 0 {
+			d = 2*time.Duration(dd.AfterTime)*time.Second - remainTime
+			if d > time.Minute {
+				telephoneMsg += "\n* 距离电话通知第二联系人还有 " + d.String()
+			} else {
+				telephoneMsg += "\n* 正在电话通知第二联系人...\n>" + dd.telAlert(dd.SecondContacts, title, message)
+			}
+		} else {
+			telephoneMsg += "\n* 没有配置第二联系人"
+		}
+		// 电话第三联系人
+		fmt.Println("3", dd.ThirdContacts != nil, len(dd.ThirdContacts) > 0, len(dd.ThirdContacts), dd.ThirdContacts)
+		if dd.ThirdContacts != nil && len(dd.ThirdContacts) > 0 {
+			d = 3*time.Duration(dd.AfterTime)*time.Second - remainTime
+			if d > time.Minute {
+				telephoneMsg += "\n* 距离电话通知第三联系人还有 " + d.String()
+			} else {
+				telephoneMsg += "\n* 正在电话通知第三联系人 ...\n>" + dd.telAlert(dd.ThirdContacts, title, message)
+			}
+		} else {
+			telephoneMsg += "\n* 没有配置第三联系人"
 		}
 	} else {
 		telephoneMsg += "没有开启电话报警功能"
@@ -266,11 +318,12 @@ type TelCalResponse struct {
 	Code    string
 }
 
-func (dd *DingDingNotifier) telAlert(title, message string) string {
+func (dd *DingDingNotifier) telAlert(telephone []string, title, message string) string {
 	if len(setting.TelAlertUrl) <= 0 {
 		return "报警失败: 没有配置报警Url"
 	}
-	for _, tel := range dd.AtMobiles {
+	at := ""
+	for _, tel := range telephone {
 		v := url.Values{}
 		v.Add("tel", tel)
 		v.Add("platform", title)
@@ -284,9 +337,10 @@ func (dd *DingDingNotifier) telAlert(title, message string) string {
 		if res.StatusCode != 200 {
 			return "报警失败: " + res.Status
 		}
+		at += "@" + tel + " "
 	}
 
-	return "电话报警成功."
+	return "电话报警成功. 已通知 " + at
 }
 
 func StatusToString(stateType models.AlertStateType) string {
@@ -300,4 +354,12 @@ func StatusToString(stateType models.AlertStateType) string {
 	default:
 		return "[未知错误]"
 	}
+}
+
+func split(str, sep string) []string {
+	if len(str) == 0 {
+		return []string{}
+	}
+
+	return strings.Split(str, sep)
 }
