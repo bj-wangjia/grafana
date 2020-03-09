@@ -49,7 +49,7 @@ const dingdingOptionsTemplate = `
       </div>
       <div class="gf-form" ng-if="ctrl.model.settings.telAlert">
         <span class="gf-form-label width-10">First Contacts</span>
-        <input type="text" required class="gf-form-input max-width-70" ng-model="ctrl.model.settings.firstContacts" placeholder="phone number: such as '186xxx1234,186xxx4321'"></input>
+        <input type="text" class="gf-form-input max-width-70" ng-model="ctrl.model.settings.firstContacts" placeholder="phone number: such as '186xxx1234,186xxx4321'"></input>
       </div>
       <div class="gf-form" ng-if="ctrl.model.settings.telAlert">
         <span class="gf-form-label width-10">Second Contacts</span>
