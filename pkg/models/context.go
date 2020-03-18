@@ -51,7 +51,7 @@ func (ctx *ReqContext) JsonApiErr(status int, message string, err error) {
 	resp := make(map[string]interface{})
 
 	if err != nil {
-		ctx.Logger.Error(message, "error", err)
+		ctx.Logger.Error(message, "error[%s], env[%s], [%s]", err, setting.Env, setting.PROD)
 		if setting.Env != setting.PROD {
 			resp["error"] = err.Error()
 		}
@@ -67,7 +67,6 @@ func (ctx *ReqContext) JsonApiErr(status int, message string, err error) {
 	if message != "" {
 		resp["message"] = message
 	}
-
 	ctx.JSON(status, resp)
 }
 

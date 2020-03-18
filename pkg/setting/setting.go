@@ -59,6 +59,7 @@ var (
 	AppSubUrl        string
 	ServeFromSubPath bool
 	InstanceName     string
+	TimeRangeLimit   int
 	TelAlertUrl      string
 
 	// build
@@ -644,6 +645,7 @@ func (cfg *Cfg) Load(args *CommandLineArgs) error {
 		return err
 	}
 	ServeFromSubPath = server.Key("serve_from_sub_path").MustBool(false)
+	TimeRangeLimit = server.Key("time_range_limit").MustInt(6)
 	TelAlertUrl = server.Key("tel_alert_url").MustString("")
 
 	cfg.AppUrl = AppUrl

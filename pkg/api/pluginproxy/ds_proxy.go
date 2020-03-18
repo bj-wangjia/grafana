@@ -90,9 +90,39 @@ func newHTTPClient() httpClient {
 	}
 }
 
+func (proxy *DataSourceProxy) checkRequest() error {
+
+	start := proxy.ctx.Req.Request.URL.Query().Get("start")
+	end := proxy.ctx.Req.Request.URL.Query().Get("end")
+
+	if len(start) > 0 && len(end) > 0 {
+		s, err := tryParseUnixMsEpoch(start)
+		if !err {
+			return fmt.Errorf("parse start time error[%s]", start)
+		}
+
+		e, err := tryParseUnixMsEpoch(end)
+		if !err {
+			return fmt.Errorf("parse end time error[%s]", end)
+		}
+
+		d := e.Sub(s)
+		if d > time.Duration(setting.TimeRangeLimit)*time.Hour {
+			return errors.New(fmt.Sprintf("对不起，目前不支持时间范围大于%s的查询", (time.Duration(setting.TimeRangeLimit) * time.Hour).String()))
+		}
+	}
+
+	return nil
+}
+
 func (proxy *DataSourceProxy) HandleRequest() {
 	if err := proxy.validateRequest(); err != nil {
 		proxy.ctx.JsonApiErr(403, err.Error(), nil)
+		return
+	}
+
+	if err := proxy.checkRequest(); err != nil {
+		proxy.ctx.JsonApiErr(500, err.Error(), err)
 		return
 	}
 
@@ -134,7 +164,6 @@ func (proxy *DataSourceProxy) HandleRequest() {
 		opentracing.HTTPHeadersCarrier(proxy.ctx.Req.Request.Header)); err != nil {
 		logger.Error("Failed to inject span context instance", "err", err)
 	}
-
 	reverseProxy.ServeHTTP(proxy.ctx.Resp, proxy.ctx.Req.Request)
 }
 
@@ -288,6 +317,14 @@ func (proxy *DataSourceProxy) validateRequest() error {
 	}
 
 	return nil
+}
+
+func tryParseUnixMsEpoch(val string) (time.Time, bool) {
+	if val, err := strconv.ParseInt(val, 10, 64); err == nil {
+		seconds := val
+		return time.Unix(seconds, 0), true
+	}
+	return time.Time{}, false
 }
 
 func (proxy *DataSourceProxy) logRequest() {
