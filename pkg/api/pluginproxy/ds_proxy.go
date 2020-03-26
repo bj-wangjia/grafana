@@ -91,10 +91,9 @@ func newHTTPClient() httpClient {
 }
 
 func (proxy *DataSourceProxy) checkRequest() error {
-
+	logger.Info("RequestQuery: " + proxy.ctx.Req.Request.URL.RawQuery + "\t" + strconv.FormatBool(setting.AllowedOffset) + "\t" + strconv.FormatBool(strings.Contains(proxy.ctx.Req.Request.URL.RawQuery, "offset")))
 	start := proxy.ctx.Req.Request.URL.Query().Get("start")
 	end := proxy.ctx.Req.Request.URL.Query().Get("end")
-
 	if len(start) > 0 && len(end) > 0 {
 		s, err := tryParseUnixMsEpoch(start)
 		if !err {
@@ -110,6 +109,10 @@ func (proxy *DataSourceProxy) checkRequest() error {
 		if d > time.Duration(setting.TimeRangeLimit)*time.Hour {
 			return errors.New(fmt.Sprintf("对不起，目前不支持时间范围大于%s的查询", (time.Duration(setting.TimeRangeLimit) * time.Hour).String()))
 		}
+	}
+
+	if !setting.AllowedOffset && strings.Contains(proxy.ctx.Req.Request.URL.RawQuery, "offset") {
+		return errors.New("对不起，目前不支持带offset的查询")
 	}
 
 	return nil
