@@ -270,7 +270,7 @@ func (dd *DingDingNotifier) genMarkdownContent(evalContext *alerting.EvalContext
 		if d > time.Minute {
 			telephoneMsg += "\n* 距离电话通知第一联系人还有 " + d.String()
 		} else {
-			telephoneMsg += "\n* 正在电话通知第一联系人...\n>" + dd.telAlert(dd.FirstContacts, title, message)
+			telephoneMsg += "\n* 正在电话通知第一联系人...\n>" + dd.telRotateAlert(dd.FirstContacts, title, message)
 		}
 		// 电话第二联系人
 		log.New("alerting.notifier.dingding").Info(fmt.Sprintf("xxxxxfirst[%s], second[%s],third[%s]", dd.FirstContacts, dd.SecondContacts, dd.ThirdContacts))
@@ -280,7 +280,7 @@ func (dd *DingDingNotifier) genMarkdownContent(evalContext *alerting.EvalContext
 			if d > time.Minute {
 				telephoneMsg += "\n* 距离电话通知第二联系人还有 " + d.String()
 			} else {
-				telephoneMsg += "\n* 正在电话通知第二联系人...\n>" + dd.telAlert(dd.SecondContacts, title, message)
+				telephoneMsg += "\n* 正在电话通知第二联系人...\n>" + dd.telRotateAlert(dd.SecondContacts, title, message)
 			}
 		} else {
 			telephoneMsg += "\n* 没有配置第二联系人"
@@ -292,7 +292,7 @@ func (dd *DingDingNotifier) genMarkdownContent(evalContext *alerting.EvalContext
 			if d > time.Minute {
 				telephoneMsg += "\n* 距离电话通知第三联系人还有 " + d.String()
 			} else {
-				telephoneMsg += "\n* 正在电话通知第三联系人 ...\n>" + dd.telAlert(dd.ThirdContacts, title, message)
+				telephoneMsg += "\n* 正在电话通知第三联系人 ...\n>" + dd.telRotateAlert(dd.ThirdContacts, title, message)
 			}
 		} else {
 			telephoneMsg += "\n* 没有配置第三联系人"
@@ -339,6 +339,41 @@ func (dd *DingDingNotifier) telAlert(telephone []string, title, message string) 
 		}
 		at += "@" + tel + " "
 	}
+
+	return "电话报警成功. 已通知 " + at
+}
+
+func (dd *DingDingNotifier) telRotateAlert(telephone []string, title, message string) string {
+	if len(setting.TelAlertUrl) <= 0 {
+		return "报警失败: 没有配置报警Url"
+	}
+
+	l := len(telephone)
+	if l == 0 {
+		return "报警失败：没有配置电话"
+	}
+
+	at := ""
+	// current phone by weekday
+	weekday := int(time.Now().Weekday()) // 0..6
+	cur := weekday%l
+	tel := telephone[cur]
+	v := url.Values{}
+	v.Add("tel", tel)
+	v.Add("platform", title)
+	v.Add("msg", message)
+	u := fmt.Sprintf("http://%s/?%s", setting.TelAlertUrl, v.Encode())
+	dd.log.Info("TelAlert: ", u)
+
+	res, err := http.Get(u)
+	if err != nil {
+		return "报警失败: " + err.Error()
+	}
+	if res.StatusCode != 200 {
+		return "报警失败: " + res.Status
+	}
+
+	at += "@" + tel + " "
 
 	return "电话报警成功. 已通知 " + at
 }
