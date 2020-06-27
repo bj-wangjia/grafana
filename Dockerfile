@@ -8,6 +8,9 @@ WORKDIR $GOPATH/src/github.com/grafana/grafana
 COPY go.mod go.sum ./
 COPY vendor vendor
 
+RUN go env -w GO111MODULE=on
+RUN go env -w GOPROXY=https://goproxy.io,direct
+
 RUN go mod verify
 
 COPY pkg pkg

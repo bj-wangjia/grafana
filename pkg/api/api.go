@@ -372,6 +372,13 @@ func (hs *HTTPServer) registerRoutes() {
 			annotationsRoute.Post("/graphite", reqEditorRole, bind(dtos.PostGraphiteAnnotationsCmd{}), Wrap(PostGraphiteAnnotation))
 		})
 
+		apiRoute.Group("/abtesting", func(experiment routing.RouteRegister) {
+			experiment.Get("/experiment", Wrap(hs.GetExperiments))
+			experiment.Post("/experiment", bind(models.AddExperimentCommand{}), Wrap(hs.AddExperiment))
+			experiment.Put("/experiment", bind(models.UpdateExperimentCommand{}), Wrap(hs.UpdateExperiment))
+			experiment.Delete("/experiment", Wrap(hs.DeleteExperiment))
+		})
+
 		// error test
 		r.Get("/metrics/error", Wrap(GenerateError))
 
