@@ -14,17 +14,15 @@ func init() {
 }
 
 func AddExperiment(cmd *m.AddExperimentCommand) error {
-	b, err := cmd.Value.ToDB()
-	if err != nil {
-		return err
-	}
 	return inTransaction(func(sess *DBSession) error {
 		experiment := m.Experiment{
-			Name:    cmd.Name,
-			Value:   string(b),
-			Status:  m.StatusInit,
-			Created: time.Now(),
-			Updated: time.Now(),
+			Name:      cmd.Name,
+			Value:     cmd.Value,
+			Status:    m.StatusInit,
+			Created:   time.Now(),
+			Updated:   time.Now(),
+			CreatedBy: cmd.Author,
+			UpdatedBy: cmd.Author,
 		}
 		_, err := sess.Insert(&experiment)
 		cmd.Result = experiment
@@ -33,16 +31,15 @@ func AddExperiment(cmd *m.AddExperimentCommand) error {
 }
 
 func UpDateExperiment(cmd *m.UpdateExperimentCommand) error {
-	b, err := cmd.Value.ToDB()
-	if err != nil {
-		return err
-	}
 	return inTransaction(func(sess *DBSession) error {
 		experiment := m.Experiment{
-			Name:    cmd.Name,
-			Value:   string(b),
-			Updated: time.Now(),
+			Name:      cmd.Name,
+			Status:    cmd.Status,
+			Value:     cmd.Value,
+			Updated:   time.Now(),
+			UpdatedBy: cmd.Author,
 		}
+		cmd.Result = experiment
 
 		affectedRows, err := sess.ID(cmd.Id).Where("name = ?", cmd.Name).Update(&experiment)
 
@@ -67,7 +64,10 @@ func GetExperiments(query *m.GetExperimentsQuery) error {
 				experiment.name,
 				experiment.status,
 				experiment.created,
-				experiment.value`).
+				experiment.updated,
+				experiment.value,
+				experiment.created_by,
+				experiment.updated_by`).
 		//Where("dashboard_version.dashboard_id=? AND dashboard.org_id=?", query.DashboardId, query.OrgId).
 		OrderBy("experiment.updated DESC").
 		Limit(query.Limit, query.Start).
@@ -76,9 +76,6 @@ func GetExperiments(query *m.GetExperimentsQuery) error {
 		return err
 	}
 
-	if len(query.Result) < 1 {
-		return m.ErrExperimentNotFound
-	}
 	return nil
 }
 

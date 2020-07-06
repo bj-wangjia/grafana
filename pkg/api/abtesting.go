@@ -24,16 +24,18 @@ func (hs *HTTPServer) GetExperiments(c *m.ReqContext) Response {
 
 func (hs *HTTPServer) AddExperiment(c *m.ReqContext, cmd m.AddExperimentCommand) Response {
 	hs.log.Info(fmt.Sprintf("%+v", cmd))
+	cmd.Author = c.Login
 
 	if err := hs.Bus.Dispatch(&cmd); err != nil {
 		return Error(500, "Failed to add experiment", err)
 	}
 
-	return Success("experiment added")
+	return JSON(200, cmd.Result)
 }
 
 func (hs *HTTPServer) UpdateExperiment(c *m.ReqContext, cmd m.UpdateExperimentCommand) Response {
 	cmd.Id = c.QueryInt("id")
+	cmd.Author = c.Login
 	if err := hs.Bus.Dispatch(&cmd); err != nil {
 		return Error(500, "Failed to update experiment", err)
 	}

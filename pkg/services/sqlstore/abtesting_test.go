@@ -1,6 +1,7 @@
 package sqlstore
 
 import (
+	"fmt"
 	"github.com/grafana/grafana/pkg/bus"
 	"github.com/grafana/grafana/pkg/components/simplejson"
 	"github.com/grafana/grafana/pkg/models"
@@ -14,8 +15,9 @@ func TestExperiment(t *testing.T) {
 
 		Convey("add two experiment", func() {
 			experiment1 := &models.AddExperimentCommand{
-				Name:  "experiment1",
-				Value: simplejson.New(),
+				Name:   "experiment1",
+				Value:  simplejson.New(),
+				Author: "wangjia",
 			}
 			experiment2 := &models.AddExperimentCommand{
 				Name:  "experiment2",
@@ -32,6 +34,9 @@ func TestExperiment(t *testing.T) {
 
 			So(bus.Dispatch(query), ShouldBeNil)
 			So(len(query.Result), ShouldEqual, 2)
+			for _, q := range query.Result {
+				fmt.Println(q)
+			}
 		})
 	})
 }
